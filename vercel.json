@@ -1,4 +1,7 @@
 {
+  "functions": {
+    "api/*.ts": { "runtime": "@vercel/node@5" }
+  },
   "rewrites": [
     { "source": "/api/word-of-the-day", "destination": "/api/search" },
     { "source": "/api/entry/:id",        "destination": "/api/search" },
