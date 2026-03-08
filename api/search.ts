@@ -1,8 +1,11 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 
-// Self-contained: load pre-built JSON so there are no module resolution issues
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const ENTRIES: Entry[] = require('./dictionary.json');
+// Load pre-built JSON — __dirname is resolved correctly in Vercel serverless runtime
+const ENTRIES: Entry[] = JSON.parse(
+  readFileSync(join(__dirname, 'dictionary.json'), 'utf-8'),
+) as Entry[];
 
 interface Entry {
   id: string; irish: string; english: string; englishAlt?: string[];
