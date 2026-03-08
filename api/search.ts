@@ -1,6 +1,7 @@
-// Node.js serverless function — dictionary.json is co-deployed via includeFiles
+// Node.js serverless function
+// dictionary.json is co-deployed via vercel.json "includeFiles"
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 
 interface Entry {
@@ -8,11 +9,32 @@ interface Entry {
   partOfSpeech: string; category: string; gender?: string; searchTerms: string[];
 }
 
-const ENTRIES: Entry[] = JSON.parse(
-  readFileSync(join(__dirname, 'dictionary.json'), 'utf-8'),
-);
+// Try multiple paths to find the dictionary JSON
+function loadEntries(): Entry[] {
+  const candidates = [
+    join(__dirname, 'dictionary.json'),
+    join(__dirname, '..', 'api', 'dictionary.json'),
+    join(process.cwd(), 'api', 'dictionary.json'),
+    '/var/task/api/dictionary.json',
+  ];
+  for (const p of candidates) {
+    if (existsSync(p)) {
+      return JSON.parse(readFileSync(p, 'utf-8')) as Entry[];
+    }
+  }
+  throw new Error(`dictionary.json not found. Tried: ${candidates.join(', ')}`);
+}
 
-const CORS = {
+let ENTRIES: Entry[];
+try {
+  ENTRIES = loadEntries();
+} catch (e) {
+  // Will be reported at request time
+  ENTRIES = [];
+  console.error('Failed to load dictionary:', e);
+}
+
+const CORS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type',
@@ -27,7 +49,7 @@ function normalize(t: string) {
 
 function doSearch(entries: Entry[], query: string, category: string | null, limit: number) {
   const q = normalize(query.trim());
-  let pool = category ? entries.filter(e => e.category === category) : entries;
+  const pool = category ? entries.filter(e => e.category === category) : entries;
   if (!q) return { entries: pool.slice(0, limit), total: pool.length, query };
   const matched = pool.filter(e => e.searchTerms.some(t => t.includes(q)));
   return { entries: matched.slice(0, limit), total: matched.length, query };
@@ -53,6 +75,10 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
   Object.entries(CORS).forEach(([k, v]) => res.setHeader(k, v));
   res.setHeader('Content-Type', 'application/json');
 
+  if (ENTRIES.length === 0) {
+    return res.status(500).json({ error: 'Dictionary not loaded', __dirname, cwd: process.cwd() });
+  }
+
   const path = (req.url ?? '').split('?')[0];
 
   if (path === '/api/word-of-the-day') {
@@ -70,7 +96,6 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
     return res.json({ categories: categoryCounts(ENTRIES), total: ENTRIES.length });
   }
 
-  // Default: /api/search
   const q = ((req.query['q'] as string) ?? '').trim();
   const cat = (req.query['category'] as string) ?? '';
   const limit = Math.min(parseInt((req.query['limit'] as string) ?? '20', 10) || 20, 200);
