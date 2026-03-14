@@ -146,9 +146,9 @@ export function App() {
             <IntegrationPanel />
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-8">
               {[
-                { icon: '⚡', title: 'Zero Dependencies', desc: 'Pure TypeScript, no external packages required' },
-                { icon: '🔍', title: 'Fada-Insensitive', desc: 'Search "mathair" or "máthair" - both work' },
-                { icon: '🌐', title: 'Any Framework', desc: 'React, Vue, Svelte, vanilla JS, or REST API' },
+                { icon: '📚', title: '135k Entries', desc: '4 open data sources: hand-curated, LSG WordNet, Wiktionary, BuNaMo' },
+                { icon: '🔍', title: 'Fada-Insensitive', desc: 'Search "mathair" or "máthair" — both return the same results' },
+                { icon: '🌐', title: 'Any Framework', desc: 'Widget, iframe embed, REST API, or npm package' },
               ].map(({ icon, title, desc }) => (
                 <div key={title} className="glass rounded-xl p-5 text-center">
                   <div className="text-3xl mb-3">{icon}</div>
