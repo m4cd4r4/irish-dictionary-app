@@ -2,7 +2,8 @@
   "functions": {
     "api/search.ts": {
       "maxDuration": 30,
-      "memory": 1024
+      "memory": 1024,
+      "includeFiles": "src/data/irish-dictionary-data.json"
     }
   },
   "rewrites": [

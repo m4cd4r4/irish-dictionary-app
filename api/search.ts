@@ -1,6 +1,7 @@
 // Node.js serverless function — JSON loaded once, cached between warm invocations
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import rawEntries from '../src/data/irish-dictionary-data.json';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 
 interface Entry {
   id: string; irish: string; english: string; englishAlt?: string[];
@@ -8,7 +9,16 @@ interface Entry {
   source?: string; pronunciation?: string; inflections?: string[]; synonymIds?: string[];
 }
 
-const ENTRIES = rawEntries as unknown as Entry[];
+// Lazy-load + cache: read from filesystem on first invocation, reuse on warm starts
+let ENTRIES: Entry[] | null = null;
+
+function getEntries(): Entry[] {
+  if (ENTRIES) return ENTRIES;
+  const filePath = join(process.cwd(), 'src/data/irish-dictionary-data.json');
+  const raw = readFileSync(filePath, 'utf-8');
+  ENTRIES = JSON.parse(raw) as Entry[];
+  return ENTRIES;
+}
 
 const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
@@ -69,45 +79,54 @@ function sourceCounts(entries: Entry[]): Record<string, number> {
 }
 
 export default function handler(req: VercelRequest, res: VercelResponse): void {
-  if (req.method === 'OPTIONS') {
-    for (const [k, v] of Object.entries(CORS_HEADERS)) res.setHeader(k, v);
-    res.statusCode = 204;
-    res.end();
-    return;
+  try {
+    if (req.method === 'OPTIONS') {
+      for (const [k, v] of Object.entries(CORS_HEADERS)) res.setHeader(k, v);
+      res.statusCode = 204;
+      res.end();
+      return;
+    }
+
+    const entries = getEntries();
+
+    const rawUrl = req.url ?? '/api/search';
+    const urlPath = rawUrl.split('?')[0];
+
+    if (urlPath === '/api/word-of-the-day') {
+      sendJson(res, { entry: wordOfTheDay(entries) });
+      return;
+    }
+
+    const entryMatch = urlPath.match(/^\/api\/entry\/(.+)$/);
+    if (entryMatch) {
+      const entry = entries.find(e => e.id === decodeURIComponent(entryMatch[1]));
+      if (!entry) { sendJson(res, { error: 'Not found' }, 404); return; }
+      sendJson(res, { entry });
+      return;
+    }
+
+    if (urlPath === '/api/categories') {
+      sendJson(res, { categories: categoryCounts(entries), total: entries.length });
+      return;
+    }
+
+    if (urlPath === '/api/sources') {
+      sendJson(res, { sources: sourceCounts(entries), total: entries.length });
+      return;
+    }
+
+    // Default: search
+    const q = String(req.query.q ?? '').trim();
+    const cat = String(req.query.category ?? '');
+    const src = String(req.query.source ?? '');
+    const limit = Math.min(parseInt(String(req.query.limit ?? '20'), 10) || 20, 200);
+
+    sendJson(res, doSearch(entries, q, cat || null, src || null, limit));
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const stack = err instanceof Error ? err.stack : undefined;
+    res.statusCode = 500;
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({ error: msg, stack }));
   }
-
-  // req.url is the original request path (e.g. /api/word-of-the-day?foo=bar)
-  const rawUrl = req.url ?? '/api/search';
-  const urlPath = rawUrl.split('?')[0];
-
-  if (urlPath === '/api/word-of-the-day') {
-    sendJson(res, { entry: wordOfTheDay(ENTRIES) });
-    return;
-  }
-
-  const entryMatch = urlPath.match(/^\/api\/entry\/(.+)$/);
-  if (entryMatch) {
-    const entry = ENTRIES.find(e => e.id === decodeURIComponent(entryMatch[1]));
-    if (!entry) { sendJson(res, { error: 'Not found' }, 404); return; }
-    sendJson(res, { entry });
-    return;
-  }
-
-  if (urlPath === '/api/categories') {
-    sendJson(res, { categories: categoryCounts(ENTRIES), total: ENTRIES.length });
-    return;
-  }
-
-  if (urlPath === '/api/sources') {
-    sendJson(res, { sources: sourceCounts(ENTRIES), total: ENTRIES.length });
-    return;
-  }
-
-  // Default: search
-  const q = String(req.query.q ?? '').trim();
-  const cat = String(req.query.category ?? '');
-  const src = String(req.query.source ?? '');
-  const limit = Math.min(parseInt(String(req.query.limit ?? '20'), 10) || 20, 200);
-
-  sendJson(res, doSearch(ENTRIES, q, cat || null, src || null, limit));
 }
