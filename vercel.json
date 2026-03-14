@@ -1,4 +1,10 @@
 {
+  "functions": {
+    "api/search.ts": {
+      "maxDuration": 30,
+      "memory": 1024
+    }
+  },
   "rewrites": [
     { "source": "/api/word-of-the-day", "destination": "/api/search" },
     { "source": "/api/entry/:id",        "destination": "/api/search" },
