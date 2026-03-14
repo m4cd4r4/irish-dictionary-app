@@ -1,5 +1,5 @@
-// Edge Function — esbuild bundles JSON import at build time, no runtime fs needed
-export const config = { runtime: 'edge' };
+// Node.js serverless function — JSON is loaded once and cached in memory
+export const config = { runtime: 'nodejs' };
 
 import rawEntries from '../src/data/irish-dictionary-data.json';
 

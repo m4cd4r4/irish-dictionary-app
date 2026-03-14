@@ -1,33 +1,66 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { SearchInput } from './components/SearchInput';
 import { CategoryFilter } from './components/CategoryFilter';
 import { EntryCard } from './components/EntryCard';
 import { WordOfTheDay } from './components/WordOfTheDay';
-import type { DictionaryCategory } from './data/irish-dictionary';
-import { search, categoryCounts, wordOfTheDay } from './search';
+import type { DictionaryCategory, DictionaryEntry } from './data/irish-dictionary';
 
-const getDictionary = () => import('./data/irish-dictionary').then(m => m.DICTIONARY_ENTRIES);
+const API_BASE = '/api/search';
+
+interface SearchResult {
+  entries: DictionaryEntry[];
+  total: number;
+  query: string;
+}
+
+async function apiFetch<T>(url: string): Promise<T> {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`API error ${r.status}`);
+  return r.json() as Promise<T>;
+}
 
 export function Embed() {
   const [searchParams] = useSearchParams();
   const initialCategory = searchParams.get('category') as DictionaryCategory | null;
 
-  const [entries, setEntries] = useState<Awaited<ReturnType<typeof getDictionary>>>([]);
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<DictionaryCategory | null>(initialCategory);
-  const [loaded, setLoaded] = useState(false);
+  const [results, setResults] = useState<SearchResult | null>(null);
+  const [wotd, setWotd] = useState<DictionaryEntry | null>(null);
+  const [counts, setCounts] = useState<Record<string, number>>({});
+  const [total, setTotal] = useState(0);
+  const [metaLoaded, setMetaLoaded] = useState(false);
+
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    void getDictionary().then(e => { setEntries(e); setLoaded(true); });
+    Promise.all([
+      apiFetch<{ entry: DictionaryEntry }>('/api/word-of-the-day'),
+      apiFetch<{ categories: Record<string, number>; total: number }>('/api/categories'),
+    ]).then(([wotdRes, catRes]) => {
+      setWotd(wotdRes.entry);
+      setCounts(catRes.categories);
+      setTotal(catRes.total);
+      setMetaLoaded(true);
+    }).catch(() => setMetaLoaded(true));
   }, []);
 
-  const counts = useMemo(() => categoryCounts(entries), [entries]);
-  const wotd = useMemo(() => entries.length ? wordOfTheDay(entries) : null, [entries]);
-  const results = useMemo(
-    () => search(entries, query, { category, limit: 40 }),
-    [entries, query, category],
-  );
+  const runSearch = useCallback((q: string, cat: DictionaryCategory | null) => {
+    const params = new URLSearchParams({ limit: '40' });
+    if (q) params.set('q', q);
+    if (cat) params.set('category', cat);
+    apiFetch<SearchResult>(`${API_BASE}?${params}`)
+      .then(setResults)
+      .catch(() => setResults(null));
+  }, []);
+
+  useEffect(() => {
+    if (!query && !category) { setResults(null); return; }
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => runSearch(query, category), 250);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [query, category, runSearch]);
 
   const showWotd = !query && !category;
 
@@ -43,7 +76,7 @@ export function Embed() {
           target="_top"
           className="ml-auto text-xs text-shamrock-500 hover:text-shamrock-300 transition-colors"
         >
-          Open full site ↗
+          Open full site
         </a>
       </div>
 
@@ -53,27 +86,25 @@ export function Embed() {
       </div>
 
       {/* Category chips */}
-      {loaded && (
-        <div className="px-4 pb-3">
-          <CategoryFilter selected={category} onChange={setCategory} counts={counts} />
-        </div>
-      )}
+      <div className="px-4 pb-3">
+        <CategoryFilter selected={category} onChange={setCategory} counts={counts} />
+      </div>
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto px-4 pb-6">
-        {!loaded && (
+        {!metaLoaded && (
           <div className="flex justify-center pt-12">
             <div className="w-6 h-6 border-2 border-shamrock-600 border-t-transparent rounded-full animate-spin" />
           </div>
         )}
 
-        {loaded && showWotd && wotd && (
+        {metaLoaded && showWotd && wotd && (
           <div className="mb-4">
             <WordOfTheDay entry={wotd} />
           </div>
         )}
 
-        {loaded && (query || category) && (
+        {results && (query || category) && (
           <>
             <p className="text-xs text-gray-600 mb-3" aria-live="polite">
               {results.total} result{results.total !== 1 ? 's' : ''}
@@ -92,7 +123,7 @@ export function Embed() {
         )}
       </div>
 
-      {/* Footer attribution */}
+      {/* Footer */}
       <div className="px-4 py-2 border-t border-white/5 flex items-center justify-between">
         <span className="text-xs text-gray-700">
           Powered by{' '}
@@ -100,7 +131,7 @@ export function Embed() {
             cuplafocail.ie
           </a>
         </span>
-        <span className="text-xs text-gray-700">{entries.length.toLocaleString()} entries</span>
+        <span className="text-xs text-gray-700">{total.toLocaleString()} entries</span>
       </div>
     </div>
   );

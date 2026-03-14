@@ -114,7 +114,7 @@ def merge_sources(sources: dict[str, list[dict]]) -> list[dict]:
                 if not existing.get('synonymIds') and entry.get('synonymIds'):
                     existing['synonymIds'] = entry['synonymIds']
 
-        print(f"  {source_name}: {len(source_entries):,} input → {added:,} new entries added")
+        print(f"  {source_name}: {len(source_entries):,} input -> {added:,} new entries added")
 
     return [seen[k] for k in order]
 

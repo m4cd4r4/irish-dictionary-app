@@ -29,8 +29,8 @@ from utils import (
     WIKTIONARY_TOPIC_TO_CATEGORY,
 )
 
-# Weekly updated Irish JSONL from kaikki.org
-KAIKKI_URL = "https://kaikki.org/dictionary/Irish/kaikki.org-dictionary-Irish.json"
+# Weekly updated Irish JSONL from kaikki.org (deprecated URL still works as of 2025)
+KAIKKI_URL = "https://kaikki.org/dictionary/Irish/kaikki.org-dictionary-Irish.jsonl"
 
 OUTPUT_DIR = Path(__file__).parent / "output"
 OUTPUT_FILE = OUTPUT_DIR / "wiktionary_entries.json"
